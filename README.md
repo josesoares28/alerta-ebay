@@ -47,7 +47,7 @@ Também dá para pedir a **lista completa**: chega um aviso por modelo, com todo
 
 ## O que é público e o que é privado
 
-O repositório é público. No plano grátis, o GitHub quase nunca dispara o agendamento de repositório privado; sendo público, os minutos também são ilimitados.
+O repositório é público. Assim os minutos do GitHub são ilimitados e dá para usar o temporizador que marca o intervalo entre as rodadas: no plano grátis, ele só existe em repositório público.
 
 | Público (este repositório) | Privado |
 |---|---|
@@ -68,7 +68,7 @@ alerta-ebay/
 ├── *.bat                atalhos de dois cliques para o Windows
 ├── exemplos/            formato dos arquivos de dados, com números de exemplo
 ├── dados/               SEUS dados (só no PC, fora do GitHub)
-└── .github/workflows/   agenda a verificação a cada 30 minutos
+└── .github/workflows/   as rodadas na nuvem, a cada ~30 minutos
 ```
 
 ## Como usar
@@ -98,10 +98,10 @@ alerta-ebay/
 | `LISTA-NO-CELULAR.bat` | Manda para o celular a lista completa, um aviso por modelo |
 | `ENVIAR-PARA-NUVEM.bat` | Leva para a nuvem as mudanças em `dados/` e no código |
 | `ENVIAR-CHAVE-GITHUB.bat` | Leva o Cert ID do eBay para os segredos do GitHub |
-| `DESLIGAR.bat` / `LIGAR.bat` | Pausa / volta a verificação na nuvem |
+| `DESLIGAR.bat` / `LIGAR.bat` | Pausa / volta a verificação na nuvem (o `LIGAR.bat` já faz uma rodada na hora) |
 | `CONFIGURAR.bat` | Primeira configuração |
 
-Pelo celular: github.com > alerta-ebay > Actions > Alerta eBay > **Run workflow** (marque "Mandar a lista completa" para receber tudo).
+Pelo celular: github.com > alerta-ebay > Actions > Alerta eBay > **Run workflow**. Marque "Mandar a lista completa" para receber tudo e deixe os campos de uso interno desmarcados.
 
 ## Arquivos de dados (`dados/`)
 
@@ -170,7 +170,8 @@ lucro     = recebe − custo
   - Cada rodada gasta umas 35.
   - Anúncio de vários tamanhos é aberto uma vez e guardado de 4 a 8 horas.
   - Se a cota acabar, o programa para sem erro e volta quando ela renova, às 4h (5h no horário de inverno dos EUA).
-- **GitHub:**
-  - às vezes atrasa ou pula rodadas agendadas;
-  - desliga o agendamento de repositório público sem mudanças há 60 dias. Por isso, depois de 30 dias parado, a própria rodada grava a data em `ativo.txt`.
+- **Rodadas no GitHub:**
+  - O agendador do GitHub quase não dispara em 2026. Por isso cada rodada agenda a próxima: espera 28 minutos no ambiente `intervalo` (um temporizador do GitHub que não gasta minutos) e, no fim, dispara a seguinte.
+  - Na aba Actions deve aparecer uma "Rodada automática" a cada ~30 minutos. Se elas pararem, ou se chegar no celular o aviso "Alerta eBay parou", rode o `LIGAR.bat`. Um agendamento de reserva, a cada 2 horas, também religa as rodadas quando o GitHub dispara.
+  - O GitHub desliga workflow com agendamento em repositório público sem mudanças há 60 dias. Por isso, depois de 30 dias parado, a própria rodada grava a data em `ativo.txt`.
 - **O lucro é uma estimativa.** Antes de comprar, confira as fotos, o vendedor e o preço de hoje na Droper.

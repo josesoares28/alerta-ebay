@@ -1,28 +1,71 @@
-# Roda o alerta.py na nuvem do GitHub a cada 30 minutos (minutos 07 e 37: na virada
-# da hora o GitHub atrasa ou pula rodadas). O repositório é público porque no plano
-# grátis o GitHub quase nunca dispara o agendamento de repositório privado; público,
-# os minutos também são ilimitados.
-# Nada pessoal fica à vista: as chaves e os dados (lista de modelos, custos, vendas da
-# Droper) vêm de segredos do repositório, e o estado das rodadas fica no cache.
+# Roda o alerta.py na nuvem do GitHub a cada ~30 minutos, de graça.
+#
+# Em 2026 o agendador do GitHub (cron) quase não dispara, então cada rodada agenda a
+# seguinte: a tarefa "esperar" usa o ambiente "intervalo", cuja regra segura a rodada
+# 28 minutos sem gastar nada, e a tarefa "proxima" dispara a rodada seguinte. O cron
+# fica de reserva: se a corrente parar, a primeira rodada agendada que sair religa.
+#
+# O repositório é público: os minutos são ilimitados e, no plano grátis, o temporizador
+# de ambiente só existe em repositório público. Nada pessoal fica à vista: as chaves e
+# os dados (lista de modelos, custos, vendas da Droper) vêm de segredos do repositório,
+# e o estado das rodadas fica no cache.
 name: Alerta eBay
+run-name: ${{ github.event_name == 'schedule' && 'Rodada de reserva' || (inputs.continuar && 'Rodada automática' || (inputs.resumo && 'Lista completa' || 'Rodada manual')) }}
 on:
   schedule:
-    - cron: "7,37 * * * *"
+    - cron: "17 */2 * * *"  # reserva: religa a corrente se ela parar
   workflow_dispatch:
     inputs:
       resumo:
         description: "Mandar a lista completa (tudo que está no alvo) para o celular"
         type: boolean
         default: false
+      continuar:
+        description: "Uso interno: no fim, agendar a próxima rodada (deixe desmarcado)"
+        type: boolean
+        default: false
+      esperar:
+        description: "Uso interno: esperar o intervalo antes de verificar (deixe desmarcado)"
+        type: boolean
+        default: false
 permissions:
-  contents: write  # só para o commit mensal que mantém o agendamento vivo
+  contents: write  # commit mensal que mantém o repositório ativo
+  actions: write   # disparar a próxima rodada
 concurrency:
-  group: alerta-ebay
+  # Uma corrente só: rodada da corrente que chega enquanto outra está em andamento
+  # fica na fila e substitui a que já estava nela. Rodada avulsa (lista, manual) não entra.
+  group: ${{ (inputs.continuar || github.event_name == 'schedule') && 'corrente' || format('avulsa-{0}', github.run_id) }}
   cancel-in-progress: false
 jobs:
+  esperar:
+    if: inputs.esperar
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: intervalo  # a regra do ambiente segura esta tarefa 28 minutos, sem gastar minutos
+      deployment: false
+    steps:
+      - name: Conferir o intervalo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Se o ambiente perder a regra de espera, espera aqui mesmo: sem ela as
+          # rodadas viriam uma atrás da outra e gastariam a cota do eBay.
+          criada=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -q .created_at || true)
+          [ -n "$criada" ] || exit 0
+          passou=$(( $(date +%s) - $(date -d "$criada" +%s) ))
+          if [ "$passou" -lt 1500 ]; then
+            echo "::warning::O ambiente intervalo não segurou a rodada; espero aqui."
+            sleep $(( 1680 - passou ))
+          fi
   verificar:
+    needs: esperar
+    if: ${{ !cancelled() && needs.esperar.result != 'failure' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: verificar  # uma verificação por vez: o estado passa de uma para a outra
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - name: Dados privados (pasta dados/, enviada pelo ENVIAR-PARA-NUVEM.bat)
@@ -55,7 +98,7 @@ jobs:
         with:
           path: estado.json
           key: estado2-${{ github.run_id }}
-      - name: Manter o agendamento vivo (o GitHub desliga o de repositório público parado há 60 dias)
+      - name: Manter o repositório ativo (o GitHub desliga workflow com agendamento em repositório público parado há 60 dias)
         if: always()
         run: |
           if [ $(( $(date +%s) - $(git log -1 --format=%ct) )) -gt 2592000 ]; then
@@ -63,6 +106,33 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add ativo.txt
-            git commit -m "Mantém o agendamento ativo"
+            git commit -m "Mantém o repositório ativo"
             git push || echo "Não deu para enviar agora; tento na próxima rodada."
           fi
+  proxima:
+    needs: verificar
+    if: ${{ always() && (inputs.continuar || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Agendar a próxima rodada
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NTFY_TOPICO: ${{ secrets.NTFY_TOPICO }}
+        run: |
+          estado=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/alerta.yml" -q .state || true)
+          case "$estado" in disabled*)
+            echo "Alerta desligado (DESLIGAR.bat): não agendo a próxima rodada."
+            exit 0;;
+          esac
+          for tentativa in 1 2 3 4 5; do
+            if gh workflow run alerta.yml -R "$GITHUB_REPOSITORY" -f continuar=true -f esperar=true; then
+              exit 0
+            fi
+            sleep 30
+          done
+          curl -s -H "Title: Alerta eBay parou" -H "Tags: warning" \
+            -d "Não consegui agendar a próxima rodada na nuvem. Rode o LIGAR.bat no PC." \
+            "https://ntfy.sh/$NTFY_TOPICO" > /dev/null || true
+          echo "::error::Não consegui agendar a próxima rodada. Rode o LIGAR.bat."
+          exit 1

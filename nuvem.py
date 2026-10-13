@@ -4,6 +4,9 @@
   num segredo do repositório, DADOS_PRIVADOS, que ninguém consegue ler. O
   repositório é público, então esses arquivos nunca entram no git.
 - O resto (código, textos) vai pelo git.
+
+Também liga e desliga as rodadas na nuvem: `python nuvem.py ligar` (LIGAR.bat) e
+`python nuvem.py desligar` (DESLIGAR.bat).
 """
 import base64
 import io
@@ -55,8 +58,43 @@ def enviar_codigo():
     print("Código e textos em dia no GitHub.")
 
 
+def gh_api(*args):
+    return subprocess.run(["gh", "api", *args], capture_output=True, text=True)
+
+
+def ligar():
+    """Liga o workflow e começa a corrente: uma rodada agora e as próximas a cada ~30 min."""
+    caminho = f"repos/{REPOSITORIO}/actions/workflows/alerta.yml"
+    r = gh_api("-X", "PUT", f"{caminho}/enable")
+    if r.returncode == 0:
+        r = gh_api("-X", "POST", f"{caminho}/dispatches", "-f", "ref=main",
+                   "-f", "inputs[continuar]=true")
+    if r.returncode:
+        sys.exit("FALHOU ao ligar: " + (r.stderr or r.stdout).strip() + " Avise o Claude.")
+    print("Ligado: a primeira rodada começa agora e as próximas vêm a cada ~30 min.")
+
+
+def desligar():
+    """Desliga o workflow e cancela a rodada que estiver esperando a vez."""
+    caminho = f"repos/{REPOSITORIO}/actions"
+    r = gh_api("-X", "PUT", f"{caminho}/workflows/alerta.yml/disable")
+    if r.returncode:
+        sys.exit("FALHOU ao desligar: " + (r.stderr or r.stdout).strip() + " Avise o Claude.")
+    r = gh_api(f"{caminho}/workflows/alerta.yml/runs?per_page=20",
+               "-q", '.workflow_runs[] | select(.status != "completed") | .id')
+    for rodada in r.stdout.split():
+        gh_api("-X", "POST", f"{caminho}/runs/{rodada}/cancel")
+    print("Pausado na nuvem.")
+
+
 if __name__ == "__main__":
-    print("Enviando para a nuvem...")
-    enviar_dados()
-    enviar_codigo()
-    print("Pronto. A nuvem usa a versão nova a partir da próxima rodada.")
+    comando = sys.argv[1] if len(sys.argv) > 1 else ""
+    if comando == "ligar":
+        ligar()
+    elif comando == "desligar":
+        desligar()
+    else:
+        print("Enviando para a nuvem...")
+        enviar_dados()
+        enviar_codigo()
+        print("Pronto. A nuvem usa a versão nova a partir da próxima rodada.")
