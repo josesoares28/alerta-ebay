@@ -1,0 +1,25 @@
+# TESTE temporário: este agendamento (repositório público) dispara uma rodada no
+# repositório privado alerta-ebay-relogio com a chave TOKEN_TESTE, para mostrar que
+# um repositório privado também roda no horário quando quem agenda é público.
+name: Teste repositorio privado
+on:
+  schedule:
+    - cron: "22,52 * * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  disparar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Disparar o teste no repositório privado
+        env:
+          TOKEN: ${{ secrets.TOKEN_TESTE }}
+        run: |
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/josesoares28/alerta-ebay-relogio/actions/workflows/teste.yml/dispatches \
+            -d '{"ref":"main"}'
+          echo "Disparo enviado para o repositório privado."
