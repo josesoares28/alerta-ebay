@@ -1,0 +1,68 @@
+# Roda o alerta.py na nuvem do GitHub a cada 30 minutos (minutos 07 e 37: na virada
+# da hora o GitHub atrasa ou pula rodadas). O repositório é público porque no plano
+# grátis o GitHub quase nunca dispara o agendamento de repositório privado; público,
+# os minutos também são ilimitados.
+# Nada pessoal fica à vista: as chaves e os dados (lista de modelos, custos, vendas da
+# Droper) vêm de segredos do repositório, e o estado das rodadas fica no cache.
+name: Alerta eBay
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      resumo:
+        description: "Mandar a lista completa (tudo que está no alvo) para o celular"
+        type: boolean
+        default: false
+permissions:
+  contents: write  # só para o commit mensal que mantém o agendamento vivo
+concurrency:
+  group: alerta-ebay
+  cancel-in-progress: false
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dados privados (pasta dados/, enviada pelo ENVIAR-PARA-NUVEM.bat)
+        env:
+          DADOS: ${{ secrets.DADOS_PRIVADOS }}
+        run: |
+          if [ -z "$DADOS" ]; then
+            echo "::error::Falta o segredo DADOS_PRIVADOS: rode o ENVIAR-PARA-NUVEM.bat no PC."
+            exit 1
+          fi
+          python3 -c "import base64, io, os, zipfile; zipfile.ZipFile(io.BytesIO(base64.b64decode(os.environ['DADOS']))).extractall('dados')"
+      - uses: actions/cache/restore@v4
+        with:
+          path: estado.json
+          key: estado2-${{ github.run_id }}
+          restore-keys: estado2-
+      - name: Estado vazio (só se o cache se perder)
+        run: test -f estado.json || echo '{}' > estado.json
+      - name: Verificar eBay
+        env:
+          EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+          EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
+          NTFY_TOPICO: ${{ secrets.NTFY_TOPICO }}
+          CEP_EUA: ${{ secrets.CEP_EUA }}
+          TZ: America/Sao_Paulo
+          PYTHONIOENCODING: utf-8
+        run: python3 alerta.py ${{ inputs.resumo && '--resumo' || '' }}
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: estado.json
+          key: estado2-${{ github.run_id }}
+      - name: Manter o agendamento vivo (o GitHub desliga o de repositório público parado há 60 dias)
+        if: always()
+        run: |
+          if [ $(( $(date +%s) - $(git log -1 --format=%ct) )) -gt 2592000 ]; then
+            date -u +%Y-%m-%d > ativo.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add ativo.txt
+            git commit -m "Mantém o agendamento ativo"
+            git push || echo "Não deu para enviar agora; tento na próxima rodada."
+          fi

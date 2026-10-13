@@ -1,0 +1,10 @@
+# Seus dados e chaves ficam só no PC. A nuvem recebe a pasta dados/ por um
+# segredo do GitHub (DADOS_PRIVADOS), enviado pelo ENVIAR-PARA-NUVEM.bat.
+dados/
+config.json
+estado.json
+log.txt
+
+# Arquivos temporários
+*.tmp
+__pycache__/

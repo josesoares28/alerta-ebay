@@ -1,0 +1,29 @@
+# Custos e regras do Alerta eBay. Mude só o número depois do "=".
+# (Valores de exemplo. Os seus ficam em dados/ajustes.txt, que não vai para o GitHub.)
+
+# Quanto custa trazer cada par dos EUA até você (personal shopper ou redirecionadora
+# + impostos), em R$.
+custo_personal_shopper_reais = 400
+
+# Quanto da venda na Droper fica com você, em % (o resto é a comissão).
+droper_voce_recebe_porcentagem = 87
+
+# Quanto o cartão cobra acima do dólar oficial (veja nas suas faturas).
+cartao_acima_do_dolar_oficial_porcentagem = 4
+
+# IOF do cartão em compra no exterior.
+iof_porcentagem = 3,5
+
+# Imposto de venda que o eBay cobra conforme o estado do endereço nos EUA
+# (0 em estado sem sales tax, ex.: Delaware, Oregon).
+sales_tax_eua_porcentagem = 0
+
+# Anúncio que aceita oferta entra no aviso se estiver até esta % acima do seu alvo.
+aceita_oferta_ate_acima_do_alvo_porcentagem = 10
+
+# Lucro mínimo para avisar (R$). Com as vendas da Droper (vendas-droper.csv), o
+# programa calcula, tamanho a tamanho, até quanto vale pagar no eBay para sobrar isto.
+lucro_minimo_reais = 500
+
+# Em par caro, exige também esta % do custo (par de R$ 8.000 -> lucro de R$ 2.000).
+lucro_minimo_porcentagem_do_custo = 25
