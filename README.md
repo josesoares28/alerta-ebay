@@ -34,10 +34,14 @@ flowchart LR
 
 Ilustrativo, com números inventados:
 
-> **Jordan 1 Low OG: US$ 95,00 (novo) tam 10**
-> Lucro ~R$ 741: Droper 42 novo R$ 1.899 (mediana das últimas vendas; 4 venda(s) em 30 dias no tamanho) → você recebe R$ 1.652; custo R$ 911. Dá o lucro mínimo pagando até US$ 139,73
-> novo com caixa · frete grátis
-> Vendedor exemplo123 · 100% (1.204 avaliações)
+> **Jordan 1 Low OG: US$ 95,00 (novo) tam 10**\
+> Lucro ~R$ 741: Droper 42 novo R$ 1.899 (mediana das últimas vendas; 4 venda(s) em 30 dias no tamanho) → você recebe R$ 1.652; custo R$ 911. Dá o lucro mínimo pagando até US$ 139,73\
+> novo com caixa · frete grátis\
+> Vendedor exemplo123 · 99,8% (1204 avaliações)\
+> Anunciado 12/10 21:40\
+> Nike Air Jordan 1 Retro Low OG Size 10 Brand New
+
+O aviso vem com a foto do anúncio e o botão **Abrir no eBay**.
 
 Também dá para pedir a **lista completa**: chega um aviso por modelo, com todos os anúncios no alvo, o de maior lucro primeiro.
 
