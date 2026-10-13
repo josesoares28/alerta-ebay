@@ -24,6 +24,7 @@ import random
 import re
 import statistics
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -764,8 +765,17 @@ def enviar(cfg, titulo, mensagem, link=None, imagem=None, prioridade=4):
         corpo["actions"] = [{"action": "view", "label": "Abrir no eBay", "url": link}]
     if imagem:
         corpo["attach"] = imagem
-    http("https://ntfy.sh/", dados=json.dumps(corpo).encode("utf-8"),
-         cabecalhos={"Content-Type": "application/json"})
+    for espera in (5, 15, None):  # a rede às vezes falha um instante: tenta até 3 vezes
+        try:
+            http("https://ntfy.sh/", dados=json.dumps(corpo).encode("utf-8"),
+                 cabecalhos={"Content-Type": "application/json"})
+            return
+        except urllib.error.HTTPError:
+            raise  # o ntfy respondeu (ex.: limite de envios): repetir agora não adianta
+        except OSError:
+            if espera is None:
+                raise
+            time.sleep(espera)
 
 
 def linha_lucro(a):
