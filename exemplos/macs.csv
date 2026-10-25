@@ -1,0 +1,7 @@
+ativo;nome;busca;exigir;excluir;ram_min;ssd_min;max_usd;ml_usado_reais
+S;MacBook Air M4;macbook air m4;macbook air/mba, m4;;16;512;830;8500
+S;MacBook Air M3;macbook air m3;macbook air/mba, m3;;16;512;740;7280
+S;MacBook Air M2;macbook air m2;macbook air/mba, m2;;16;512;600;
+S;MacBook Pro M1 Pro;macbook pro m1 pro;macbook pro/mbp, m1 pro/m1pro/m1 max/m1max;;16;512;600;7500
+S;MacBook Pro M2 Pro;macbook pro m2 pro;macbook pro/mbp, m2 pro/m2pro/m2 max/m2max;;16;512;760;9499
+S;MacBook Pro M3 Pro;macbook pro m3 pro;macbook pro/mbp, m3 pro/m3pro/m3 max/m3max;;18;512;950;11999

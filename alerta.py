@@ -11,6 +11,10 @@ do Banco Central, spread do cartão, IOF e custo fixo por par, em dados/ajustes.
 contra a mediana das últimas vendas na Droper no mesmo tamanho e estado
 (dados/vendas-droper.csv). Só avisa o que deixa o lucro mínimo.
 
+Também vigia MacBooks para comprar (dados/macs.csv): avisa quando um modelo da
+lista aparece até o preço-alvo, com a memória e o SSD mínimos, de vendedor bem
+avaliado e sem defeito no título, e diz por quanto chega no Brasil.
+
 Uso:
     python alerta.py           verifica e avisa no celular (é o que a nuvem roda)
     python alerta.py --lista   só mostra na tela o que está no alvo agora
@@ -37,6 +41,7 @@ PRODUTOS = DADOS / "produtos.csv"
 AJUSTES = DADOS / "ajustes.txt"
 PRECOS_DROPER = DADOS / "precos-droper.csv"
 VENDAS_DROPER = DADOS / "vendas-droper.csv"
+MACS = DADOS / "macs.csv"
 CONFIG = PASTA / "config.json"  # chaves do eBay e tópico do celular (fora do GitHub)
 ESTADO = PASTA / "estado.json"  # anúncios já avisados e consultas guardadas (fora do GitHub)
 LOG = PASTA / "log.txt"
@@ -70,6 +75,29 @@ DESCONTO_GIRO = [(4, 0.0), (2, 0.05), (1, 0.10), (0, 0.15)]
 # (até chuteira de nome parecido), réplica ou conta nova sem avaliação.
 PRECO_SUSPEITO = 0.30
 
+# MacBooks (dados/macs.csv): categoria Apple Laptops; novo, caixa aberta,
+# recondicionado e usado ("para peças" fica de fora).
+CATEGORIA_MAC = "111422"
+CONDICOES_MAC = ("1000", "1500", "2000", "2010", "2020", "2030", "2500", "3000")
+VERSAO_MAC = 1  # entra na chave dos Macs: subir manda um resumo novo deles
+MAC_PISO = 0.40  # a busca ignora abaixo de 40% do alvo: peça, caixa, acessório
+MAC_SUSPEITO = 0.60  # abaixo de 60% do alvo ganha ⚠ (golpe ou defeito escondido)
+
+# Título de Mac com defeito, bloqueio, muito desgaste, peça avulsa ou teclado japonês: ignora.
+MAC_EXCLUIR = re.compile(
+    r"\b(parts?|repair|broken|crack\w*|damage\w*|defect\w*|issues?|problems?|bad|dead|faulty|"
+    r"not working|no power|won'?t|locked|icloud|mdm|activation|blacklist\w*|read desc\w*|as[- ]is|"
+    r"lines?|spots?|dead pixels?|burn[- ]?in|logic ?board|motherboard|lcd|box only|empty box|"
+    r"fair|grade [cd]|japanese|jis|intel|core m\d)\b",
+    re.I,
+)
+# "No issues", "no scratches"... não são defeito: saem do título antes de MAC_EXCLUIR.
+MAC_SEM_DEFEITO = re.compile(r"\bno\s+(issues?|problems?|scratch\w*|dents?|dead pixels?|lines?)\b", re.I)
+SEM_CARREGADOR = re.compile(r"\b(no|without|w/o|not include\w*)\s+(charger|power adapter|adapter)\b|"
+                            r"\bcharger not included\b", re.I)
+TECLADO_ESTRANGEIRO = re.compile(r"\b(uk|british|german|french|spanish|italian|nordic|azerty|qwertz|"
+                                 r"international)\s*(keyboard|kb|layout)\b", re.I)
+
 
 def tam_br(tamanho, feminino=False):
     """Tamanho US do anúncio -> BR. O feminino (W) é 1,5 acima do masculino: W 10 = 8,5 = BR 40."""
@@ -87,6 +115,9 @@ AJUSTES_PADRAO = {
     "aceita_oferta_ate_acima_do_alvo_porcentagem": 10,
     "lucro_minimo_reais": 500,
     "lucro_minimo_porcentagem_do_custo": 25,
+    "custo_personal_shopper_notebook_reais": 500,
+    "mac_vendedor_minimo_avaliacoes": 300,
+    "mac_vendedor_minimo_positivo_porcentagem": 98,
 }
 
 URL_PTAX = ("https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo("
@@ -120,6 +151,12 @@ CONDICOES = {
     "pre-owned - fair": "usado - razoável",
     "pre-owned": "usado",
     "used": "usado",
+    "open box": "caixa aberta",
+    "certified - refurbished": "recondicionado certificado",
+    "excellent - refurbished": "recondicionado - excelente",
+    "very good - refurbished": "recondicionado - muito bom",
+    "good - refurbished": "recondicionado - bom",
+    "seller refurbished": "recondicionado pelo vendedor",
 }
 
 
@@ -439,7 +476,8 @@ def enxuto(v):
     if "localizedAspects" in v:
         e["localizedAspects"] = [{"name": a.get("name"), "value": a.get("value")}
                                  for a in v["localizedAspects"] or []
-                                 if re.search(r"size|style|mpn|department", a.get("name") or "", re.I)]
+                                 if re.search(r"size|style|mpn|department|capacity|storage|memory",
+                                              a.get("name") or "", re.I)]
     e["shippingOptions"] = [{"shippingCost": o["shippingCost"]}
                             for o in v.get("shippingOptions") or [] if o.get("shippingCost")]
     vend = v.get("seller") or {}
@@ -589,6 +627,17 @@ def avaliar(item, prod, de_grupo=False):
         est = (item.get("estimatedAvailabilities") or [{}])[0]
         if est.get("estimatedAvailabilityStatus") == "OUT_OF_STOCK":
             return None
+    return dict(dados_anuncio(item, prod, preco, novo, cond_en), **{
+        "teto": teto,
+        "aceita_oferta": aceita_oferta,
+        "acima_do_alvo": preco > teto + 0.001,  # só entrou porque aceita oferta
+        "tamanho": tam,
+        "feminino": prod.get("feminino", False),
+    })
+
+
+def dados_anuncio(item, prod, preco, novo, cond_en):
+    """O que todo aviso usa do anúncio: link, frete, vendedor, foto, data."""
     frete = None
     for op in item.get("shippingOptions") or []:
         c = op.get("shippingCost")
@@ -601,27 +650,21 @@ def avaliar(item, prod, de_grupo=False):
         var = partes[2] if len(partes) > 2 and partes[2] not in ("", "0") else ""
         link = f"https://www.ebay.com/itm/{legado}" + (f"?var={var}" if var else "")
     vend = item.get("seller") or {}
-    criado = item.get("itemCreationDate") or item.get("itemOriginDate")
     return {
         "id": item.get("itemId"),
         "produto": prod["nome"],
         "chave": prod["chave"],
-        "titulo": titulo,
+        "titulo": item.get("title") or "",
         "preco": preco,
-        "teto": teto,
-        "aceita_oferta": aceita_oferta,
-        "acima_do_alvo": preco > teto + 0.001,  # só entrou porque aceita oferta
         "frete": frete,
         "novo": novo,
         "condicao": CONDICOES.get(cond_en.lower(), cond_en or ("novo" if novo else "usado")),
-        "tamanho": tam,
-        "feminino": prod.get("feminino", False),
         "link": link,
         "imagem": (item.get("image") or {}).get("imageUrl"),
         "vendedor": vend.get("username"),
         "feedback": vend.get("feedbackPercentage"),
         "avaliacoes": vend.get("feedbackScore"),
-        "criado": criado,
+        "criado": item.get("itemCreationDate") or item.get("itemOriginDate"),
     }
 
 
@@ -669,6 +712,12 @@ def menor_anuncio(a, sku, droper):
     return preco
 
 
+def fator_reais(aj, cotacao):
+    """Quantos reais sai cada dólar pago no eBay: dólar do dia + cartão + IOF + sales tax."""
+    return (cotacao * (1 + aj["cartao_acima_do_dolar_oficial_porcentagem"] / 100)
+            * (1 + aj["iof_porcentagem"] / 100) * (1 + aj["sales_tax_eua_porcentagem"] / 100))
+
+
 def estimar_lucro(a, prod, droper, vendas, aj, cotacao):
     """Acrescenta ao anúncio: custo em reais, quanto vende na Droper, lucro e o alvo.
 
@@ -683,8 +732,7 @@ def estimar_lucro(a, prod, droper, vendas, aj, cotacao):
     a["alvo"] = a["teto"]
     if not cotacao:
         return
-    fator = (cotacao * (1 + aj["cartao_acima_do_dolar_oficial_porcentagem"] / 100)
-             * (1 + aj["iof_porcentagem"] / 100) * (1 + aj["sales_tax_eua_porcentagem"] / 100))
+    fator = fator_reais(aj, cotacao)
 
     def custo(preco_usd):
         return (preco_usd + (a["frete"] or 0)) * fator + aj["custo_personal_shopper_reais"]
@@ -755,11 +803,239 @@ def no_alvo(a, prod):
     return a["aceita_oferta"] and a["preco"] <= alvo * (1 + prod.get("margem_oferta", 0)) + 0.001
 
 
+# ---------------------------------------------------------------- Macs
+
+BATERIA = re.compile(r"(?:batt?(?:ery)?|health)\D{0,12}?(\d{2,3})\s?%|(\d{2,3})\s?%\s*(?:batt?(?:ery)?|health)", re.I)
+CICLOS = re.compile(r"(\d{1,4})\s*(?:battery\s*)?cycles?\b|\bcycles?\s*(?:count)?\s*[:=]?\s*(\d{1,4})", re.I)
+
+
+def ler_macs():
+    """MacBooks a vigiar (dados/macs.csv). Não é revenda: é preço bom para comprar."""
+    try:
+        texto = ler_texto(MACS)
+    except OSError:
+        return []
+    sep = ";" if texto.count(";") >= texto.count(",") else ","
+    macs = []
+    for i, l in enumerate(csv.DictReader(texto.splitlines(), delimiter=sep), start=2):
+        l = {(k or "").strip().lower(): (v or "").strip() for k, v in l.items()}
+        if not l.get("busca") or l.get("ativo", "S").upper().startswith("N"):
+            continue
+        ram, ssd = numero(l.get("ram_min")) or 16, numero(l.get("ssd_min")) or 512
+        exigir = [termos_re(g, "/") for g in l.get("exigir", "").split(",")]
+        macs.append({
+            "mac": True,
+            "linha": i,
+            "nome": l.get("nome") or l["busca"],
+            "busca": l["busca"],
+            "exigir": [r for r in exigir if r],
+            "excluir": termos_re(l.get("excluir", ""), ","),
+            "ram_min": ram,
+            "ssd_min": ssd,
+            "max": numero(l.get("max_usd")),
+            "ml_usado": numero(l.get("ml_usado_reais")),
+            "chave": "|".join([f"mac{VERSAO_MAC}", l["busca"].lower(), fmt_num(ram), fmt_num(ssd)]),
+        })
+    return macs
+
+
+def memorias(texto):
+    """'16GB RAM 512GB SSD' -> ({16}, {512}): até 96 GB é memória, de 128 GB para cima é SSD."""
+    ram, ssd = set(), set()
+    for n, unidade in re.findall(r"\b(\d+(?:\.\d+)?)\s?(gb|g|tb)\b", texto or "", re.I):
+        v = float(n) * (1024 if unidade.lower() == "tb" else 1)
+        (ssd if v >= 128 else ram).add(v)
+    for n in re.findall(r"\b(256|512)\s?(?:ssd|storage)\b", texto or "", re.I):
+        ssd.add(float(n))  # "8GB RAM 512 SSD"
+    return ram, ssd
+
+
+def specs_mac(item, cfg, estado):
+    """Memória e SSD do anúncio: pelo título e, se ele não diz, pela ficha (uma consulta, guardada)."""
+    ram, ssd = memorias(item.get("title"))
+    if ram and ssd:
+        return ram, ssd
+    aspectos = item.get("localizedAspects")
+    if aspectos is None:  # anúncio avulso: a ficha custa uma consulta
+        fichas = estado.setdefault("fichas", {})
+        guardada = fichas.get(item["itemId"])
+        if not (guardada and "memorias" in guardada):
+            if not item.get("itemHref"):
+                return ram, ssd
+            aspectos = api_get(item["itemHref"], cfg, estado).get("localizedAspects") or []
+            guardada = {"memorias": " ".join(
+                a.get("value") or "" for a in aspectos
+                if re.search(r"ram|ssd|capacity|storage|memory", a.get("name") or "", re.I)),
+                "quando": datetime.now(timezone.utc).isoformat()}
+            fichas[item["itemId"]] = guardada
+        texto = guardada["memorias"]
+    else:  # tamanho de anúncio de grupo: já vem com a ficha
+        texto = " ".join(a.get("value") or "" for a in aspectos
+                         if re.search(r"ram|ssd|capacity|storage|memory", a.get("name") or "", re.I))
+    ram_ficha, ssd_ficha = memorias(texto)
+    return ram or ram_ficha, ssd or ssd_ficha
+
+
+def titulo_mac_ok(titulo, prod):
+    """Só pelo título: é o modelo da linha e não fala de defeito?"""
+    limpo = MAC_SEM_DEFEITO.sub(" ", titulo or "")
+    if MAC_EXCLUIR.search(limpo) or (prod["excluir"] and prod["excluir"].search(limpo)):
+        return False
+    return all(r.search(titulo or "") for r in prod["exigir"])
+
+
+def buscar_mac(prod, cfg, estado):
+    """Anúncios "Comprar já" do modelo, entre 40% do alvo e o alvo (+ folga de oferta), nos EUA."""
+    cep = cfg.get("cep_eua") or CEP_PADRAO
+    teto = round(prod["max"] * (1 + prod.get("margem_oferta", 0)), 2)
+    filtros = [f"price:[{fmt_num(round(prod['max'] * MAC_PISO))}..{fmt_num(teto)}]", "priceCurrency:USD",
+               "buyingOptions:{FIXED_PRICE}", f"conditionIds:{{{'|'.join(CONDICOES_MAC)}}}",
+               "deliveryCountry:US", f"deliveryPostalCode:{cep}", "itemLocationCountry:US"]
+    base = {"q": prod["busca"], "category_ids": CATEGORIA_MAC, "filter": ",".join(filtros),
+            "sort": "newlyListed", "limit": "200"}
+    itens = {}
+    for pagina in range(2):
+        r = api_get(f"{API}/buy/browse/v1/item_summary/search?"
+                    + urllib.parse.urlencode(dict(base, offset=str(pagina * 200))), cfg, estado)
+        for it in r.get("itemSummaries") or []:
+            itens.setdefault(it["itemId"], it)
+        if len(itens) >= int(r.get("total") or 0) or not r.get("itemSummaries"):
+            break
+    return list(itens.values())
+
+
+def avaliar_mac(item, prod, aj):
+    """Devolve o anúncio resumido se o título, o preço, o estado e o vendedor servem, senão None."""
+    if not titulo_mac_ok(item.get("title"), prod):
+        return None
+    if (item.get("price") or {}).get("currency", "USD") != "USD":
+        return None
+    preco = float(item["price"]["value"])
+    aceita_oferta = "BEST_OFFER" in (item.get("buyingOptions") or [])
+    if preco > prod["max"] + 0.001 and not (
+            aceita_oferta and preco <= prod["max"] * (1 + prod.get("margem_oferta", 0)) + 0.001):
+        return None
+    cond_id = str(item.get("conditionId") or "")
+    if cond_id and cond_id not in CONDICOES_MAC:
+        return None
+    vend = item.get("seller") or {}
+    if (float(vend.get("feedbackPercentage") or 0) < aj["mac_vendedor_minimo_positivo_porcentagem"]
+            or int(vend.get("feedbackScore") or 0) < aj["mac_vendedor_minimo_avaliacoes"]):
+        return None
+    cond_en = (item.get("condition") or "").strip()
+    novo = cond_id.startswith("1") if cond_id else cond_en.lower().startswith("new")
+    return dict(dados_anuncio(item, prod, preco, novo, cond_en), **{
+        "mac": True,
+        "teto": prod["max"],
+        "alvo": prod["max"],
+        "aceita_oferta": aceita_oferta,
+        "acima_do_alvo": preco > prod["max"] + 0.001,
+        "tamanho": None,
+        "lucro": None,
+    })
+
+
+def achados_mac(prod, cfg, estado, aj, cotacao):
+    """Anúncios do Mac da linha no preço-alvo, com o custo para chegar e os cuidados."""
+    vistos_grupo, saida = set(), []
+    for item in buscar_mac(prod, cfg, estado):
+        if item.get("itemGroupHref"):
+            if item["itemGroupHref"] in vistos_grupo or not titulo_mac_ok(item.get("title"), prod):
+                continue  # o título já reprova: não abre as opções
+            vistos_grupo.add(item["itemGroupHref"])
+            candidatos = [(v, avaliar_mac(v, prod, aj)) for v in variacoes(item, cfg, estado)]
+        else:
+            candidatos = [(item, avaliar_mac(item, prod, aj))]
+        # avaliar_mac vem antes: é de graça e evita abrir a ficha de anúncio que não serve
+        for bruto, a in candidatos:
+            if not a:
+                continue
+            ram, ssd = specs_mac(bruto, cfg, estado)
+            if not ram or not ssd or min(ram) < prod["ram_min"] or min(ssd) < prod["ssd_min"]:
+                continue  # memória ou SSD abaixo do mínimo, ou o anúncio não diz
+            a["memorias"] = f"{fmt_num(min(ram))}GB/" + (
+                f"{fmt_num(min(ssd) / 1024)}TB" if min(ssd) >= 1000 else f"{fmt_num(min(ssd))}GB")
+            a["custo"] = ((a["preco"] + (a["frete"] or 0)) * fator_reais(aj, cotacao)
+                          + aj["custo_personal_shopper_notebook_reais"]) if cotacao else None
+            a["ml_usado"] = prod["ml_usado"]
+            m, c = BATERIA.search(a["titulo"]), CICLOS.search(a["titulo"])
+            bateria = int(next(g for g in m.groups() if g)) if m else None
+            a["bateria"] = " · ".join(([f"bateria {bateria}%"] if bateria else [])
+                                      + ([f"{next(g for g in c.groups() if g)} ciclos"] if c else []))
+            a["sem_carregador"] = bool(SEM_CARREGADOR.search(a["titulo"]))
+            alertas = []
+            if a["preco"] < MAC_SUSPEITO * prod["max"]:
+                alertas.append(f"preço muito abaixo do normal ({a['preco'] / prod['max']:.0%} do alvo): "
+                               "pode ser golpe ou defeito escondido")
+            if bateria and bateria < 80:
+                alertas.append(f"bateria com {bateria}%: perto de precisar trocar")
+            teclado = TECLADO_ESTRANGEIRO.search(a["titulo"])
+            if teclado:
+                alertas.append(f"teclado {teclado.group(1)}, não o americano")
+            a["alerta"] = "; ".join(alertas)
+            saida.append(a)
+    return saida
+
+
+def texto_aviso_mac(a, preco_antes=None):
+    titulo = f"{a['produto']}: {usd(a['preco'])} ({estado_curto(a)}) {a['memorias']}"
+    if a.get("acima_do_alvo"):
+        titulo += " · aceita oferta"
+    if preco_antes:
+        titulo = f"Baixou! {titulo}"
+    linhas = []
+    if a.get("alerta"):
+        linhas.append(f"⚠ {a['alerta']}")
+    if a.get("custo") is not None:
+        chega = f"Chega por ~{brl(a['custo'])} (dólar do dia, cartão, IOF e personal shopper)"
+        if a.get("ml_usado"):
+            chega += f"; usado no Mercado Livre ~{brl(a['ml_usado'])}"
+        linhas.append(chega)
+    if a.get("acima_do_alvo"):
+        linhas.append(f"Acima do alvo ({usd(a['alvo'])}), mas aceita oferta: proponha ~{usd(a['alvo'])}")
+    elif a.get("aceita_oferta"):
+        linhas.append("Aceita oferta: dá para tentar menos")
+    if preco_antes:
+        linhas.append(f"Antes {usd(preco_antes)}")
+    frete = "frete grátis" if a["frete"] == 0 else (f"frete {usd(a['frete'])}" if a["frete"] else "frete: ver anúncio")
+    linhas.append(f"{a['condicao']} · {frete}")
+    extras = ([a["bateria"]] if a.get("bateria") else []) + (["sem carregador"] if a.get("sem_carregador") else [])
+    if extras:
+        linhas.append(" · ".join(extras).capitalize())
+    if a["vendedor"]:
+        nota = str(a["feedback"] or "?").replace(".", ",")
+        linhas.append(f"Vendedor {a['vendedor']} · {nota}% ({a['avaliacoes'] or 0} avaliações)")
+    if a["criado"]:
+        try:
+            quando = datetime.fromisoformat(a["criado"].replace("Z", "+00:00")).astimezone()
+            linhas.append(f"Anunciado {quando:%d/%m %H:%M}")
+        except ValueError:
+            pass
+    linhas.append(a["titulo"])
+    linhas.append("Antes de pagar: peça a saúde da bateria e confirme que não tem iCloud nem MDM")
+    return titulo, "\n".join(linhas)
+
+
+def linha_resumo_mac(a):
+    partes = [("⚠ " if a.get("alerta") else "") + usd(a["preco"]), estado_curto(a), a["memorias"]]
+    if a.get("custo") is not None:
+        partes.append(f"chega ~{brl(a['custo'])}")
+    if a.get("acima_do_alvo"):
+        partes.append(f"aceita oferta: proponha {usd(a['alvo'])}")
+    if a.get("bateria"):
+        partes.append(a["bateria"])
+    if a.get("sem_carregador"):
+        partes.append("sem carregador")
+    if a.get("alerta"):
+        partes.append(a["alerta"])
+    return " · ".join(partes) + f"\n{a['link']}"
+
+
 # ---------------------------------------------------------------- aviso
 
-def enviar(cfg, titulo, mensagem, link=None, imagem=None, prioridade=4):
+def enviar(cfg, titulo, mensagem, link=None, imagem=None, prioridade=4, icone="athletic_shoe"):
     corpo = {"topic": cfg["ntfy_topico"], "title": titulo, "message": mensagem,
-             "tags": ["athletic_shoe"], "priority": prioridade}
+             "tags": [icone], "priority": prioridade}
     if link:
         corpo["click"] = link
         corpo["actions"] = [{"action": "view", "label": "Abrir no eBay", "url": link}]
@@ -816,7 +1092,9 @@ def tam_txt(a):
 
 
 def texto_aviso(a, preco_antes=None):
-    tam = f" tam {tam_txt(a)}" if a["tamanho"] else ""
+    if a.get("mac"):
+        return texto_aviso_mac(a, preco_antes)
+    tam =f" tam {tam_txt(a)}" if a["tamanho"] else ""
     titulo = f"{a['produto']}: {usd(a['preco'])} ({'novo' if a['novo'] else 'usado'}){tam}"
     if a.get("acima_do_alvo"):
         titulo += " · aceita oferta"
@@ -864,7 +1142,9 @@ def estado_curto(a):
 
 
 def linha_resumo(a):
-    partes = [("⚠ " if a.get("alerta") else "") + usd(a["preco"]), estado_curto(a)]
+    if a.get("mac"):
+        return linha_resumo_mac(a)
+    partes =[("⚠ " if a.get("alerta") else "") + usd(a["preco"]), estado_curto(a)]
     if a["tamanho"]:
         partes.append(f"tam {tam_txt(a)}")
     if a.get("acima_do_alvo"):
@@ -900,7 +1180,8 @@ def enviar_resumo(cfg, prods, encontrados, por_mensagem=20):
             if len(partes) > 1:
                 titulo += f" ({n}/{len(partes)})"
             topo = [prod["giro_txt"]] if n == 1 and prod.get("giro_txt") else []
-            enviar(cfg, titulo, "\n".join(topo + [linha_resumo(a) for a in parte]), prioridade=2)
+            enviar(cfg, titulo, "\n".join(topo + [linha_resumo(a) for a in parte]), prioridade=2,
+                   icone="computer" if prod.get("mac") else "athletic_shoe")
 
 
 # ---------------------------------------------------------------- principal
@@ -944,19 +1225,23 @@ def principal(so_listar=False, resumo=False):
         if any((s, "modelo", e) in vendas for s in prod["skus"] for e in giro):
             prod["giro_txt"] = (f"Droper vendeu {giro['novo']} novo(s) e {giro['usado']} usado(s) "
                                 "em 30 dias (tam 40-44)")
-    for prod in produtos:
-        if prod["max_novo"] is None and prod["max_usado"] is None:
+    for prod in produtos + ler_macs():
+        if (prod["max"] is None) if prod.get("mac") else (prod["max_novo"] is None and prod["max_usado"] is None):
             log(f"linha {prod['linha']} ({prod['nome']}) sem preço máximo: pulei", detalhe=True)
             continue
         prod["margem_oferta"] = aj["aceita_oferta_ate_acima_do_alvo_porcentagem"] / 100
         try:
-            achou = achados(prod, cfg, estado)
-            for a in achou:
-                estimar_lucro(a, prod, droper, vendas, aj, cotacao)
-            # par infantil que só a descrição entrega: uma consulta por anúncio, guardada
-            achou = [a for a in achou if no_alvo(a, prod) and not ficha(a["_bruto"], cfg, estado)["infantil"]]
-            for a in achou:
-                ressalvas(a, prod, cfg, estado)
+            if prod.get("mac"):
+                ja = {a["id"] for a in encontrados}  # o mesmo anúncio em duas linhas avisa uma vez
+                achou = [a for a in achados_mac(prod, cfg, estado, aj, cotacao) if a["id"] not in ja]
+            else:
+                achou = achados(prod, cfg, estado)
+                for a in achou:
+                    estimar_lucro(a, prod, droper, vendas, aj, cotacao)
+                # par infantil que só a descrição entrega: uma consulta por anúncio, guardada
+                achou = [a for a in achou if no_alvo(a, prod) and not ficha(a["_bruto"], cfg, estado)["infantil"]]
+                for a in achou:
+                    ressalvas(a, prod, cfg, estado)
             encontrados += achou
             vigiados.append(prod)
             if prod["chave"] not in iniciados:
@@ -1014,7 +1299,8 @@ def principal(so_listar=False, resumo=False):
     for a, preco_antes in sorted(novos, key=lambda x: x[0]["preco"]):
         titulo, msg = texto_aviso(a, preco_antes)
         try:
-            enviar(cfg, titulo, msg, a["link"], a["imagem"], prioridade=3 if a.get("alerta") else 4)
+            enviar(cfg, titulo, msg, a["link"], a["imagem"], prioridade=3 if a.get("alerta") else 4,
+                   icone="computer" if a.get("mac") else "athletic_shoe")
             vistos[a["id"]] = {"preco": a["preco"], "quando": agora.isoformat()}
             log(f"avisado: {titulo} {a['link']}", detalhe=True)
             avisados += 1
@@ -1044,7 +1330,9 @@ def principal(so_listar=False, resumo=False):
                         if datetime.fromisoformat(v["ate"]) > agora}
     estado.pop("iniciado", None)  # formato antigo (antes de iniciar por produto)
     estado["ultima_rodada"] = agora.isoformat()
-    log(f"{len(vigiados)} modelo(s) verificado(s), {len(encontrados)} anúncio(s) no alvo, "
+    n_macs = sum(1 for p in vigiados if p.get("mac"))
+    log(f"{len(vigiados) - n_macs} modelo(s){f' e {n_macs} Mac(s)' if n_macs else ''} verificado(s), "
+        f"{len(encontrados)} anúncio(s) no alvo, "
         f"{avisados} aviso(s) novo(s){', resumo enviado' if mostrar else ''}; "
         f"consultas ao eBay hoje: {(estado.get('chamadas') or {}).get('n', 0)}")
     gravar_json(ESTADO, estado)

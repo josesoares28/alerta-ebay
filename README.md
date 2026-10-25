@@ -11,6 +11,8 @@ A cada 30 minutos, de graça e com o PC desligado, o programa:
 
 Só avisa quando sobra o lucro mínimo que você escolheu.
 
+Também vigia **MacBooks para comprar** (veja [Macs](#macs-preço-bom-para-comprar)): avisa quando um modelo da lista aparece até o preço-alvo, de vendedor bem avaliado, e diz por quanto chega no Brasil.
+
 ## Como funciona
 
 ```mermaid
@@ -126,7 +128,22 @@ Uma linha por modelo:
 
 ### `ajustes.txt`: custos e regras
 
-Traz o custo fixo por par, a parte da venda que fica com você na Droper, o spread do cartão, o IOF, o sales tax dos EUA, a folga para oferta e o lucro mínimo (em R$ e em % do custo). Cada linha tem um comentário explicando.
+Traz o custo fixo por par, a parte da venda que fica com você na Droper, o spread do cartão, o IOF, o sales tax dos EUA, a folga para oferta e o lucro mínimo (em R$ e em % do custo). Para os Macs, traz o custo para trazer um notebook e o mínimo de avaliações do vendedor. Cada linha tem um comentário explicando.
+
+### `macs.csv`: Macs para comprar
+
+Opcional. Uma linha por modelo:
+
+| Coluna | O que é |
+|---|---|
+| `ativo` | `S` = vigiando, `N` = pausado |
+| `nome` | Como aparece no aviso |
+| `busca` | Palavras da busca no eBay (ex.: `macbook air m3`) |
+| `exigir` | Grupos que o título precisa ter, como em `produtos.csv` (ex.: `macbook air/mba, m3`) |
+| `excluir` | Palavras que descartam o anúncio |
+| `ram_min` / `ssd_min` | Memória e SSD mínimos, em GB (ex.: `16` e `512`) |
+| `max_usd` | Preço-alvo em US$ |
+| `ml_usado_reais` | Quanto o mesmo Mac usado custa no Mercado Livre, para comparar (opcional) |
 
 ### `vendas-droper.csv` e `precos-droper.csv`: a Droper
 
@@ -164,10 +181,31 @@ lucro     = recebe − custo
   - o preço está abaixo de 30% do que o par vale na Droper. Os achados de verdade ficam entre 35% e 60%.
 - **"vendedor sem avaliações":** conta nova no eBay.
 
+## Macs: preço bom para comprar
+
+Aqui não há revenda nem lucro: é um aviso de preço. Um anúncio entra quando:
+- é "Comprar já", de vendedor nos EUA, e custa até o `max_usd` (ou um pouco acima, se aceita oferta);
+- o título traz o modelo da linha;
+- a memória e o SSD (pelo título ou pela ficha do anúncio) chegam ao mínimo;
+- o vendedor tem pelo menos 98% de avaliações positivas e 300 avaliações (ajustável no `ajustes.txt`).
+
+Ficam de fora:
+- anúncio "para peças";
+- título que fala em defeito, bloqueio (iCloud, MDM), muito desgaste ("Fair", "Grade C/D") ou teclado japonês.
+
+O aviso diz por quanto o Mac chega (dólar do dia, cartão, IOF e o custo do notebook no `ajustes.txt`) e quanto ele custa usado no Mercado Livre. Quando o título traz, também mostra a bateria e se vem sem carregador.
+
+**⚠** marca:
+- preço abaixo de 60% do alvo;
+- bateria abaixo de 80%;
+- teclado de outro país.
+
+Antes de pagar, peça a saúde da bateria e confirme que não tem iCloud nem MDM.
+
 ## Limites e cuidados
 
 - **Cota do eBay:** 5.000 consultas por dia para cada chave, somando nuvem e PC.
-  - Cada rodada gasta umas 35.
+  - Cada rodada gasta umas 40: umas 35 nos tênis e uma por Mac.
   - Anúncio de vários tamanhos é aberto uma vez e guardado de 4 a 8 horas.
   - Se a cota acabar, o programa para sem erro e volta quando ela renova, às 4h (5h no horário de inverno dos EUA).
 - **Rodadas no GitHub:**

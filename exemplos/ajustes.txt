@@ -27,3 +27,12 @@ lucro_minimo_reais = 500
 
 # Em par caro, exige também esta % do custo (par de R$ 8.000 -> lucro de R$ 2.000).
 lucro_minimo_porcentagem_do_custo = 25
+
+# ---- MacBooks (dados/macs.csv): avisos de preço bom para comprar, não para revender.
+
+# Quanto o personal shopper cobra para trazer um notebook (R$). Entra no "chega por".
+custo_personal_shopper_notebook_reais = 500
+
+# Só avisa Mac de vendedor com pelo menos estas avaliações e esta % positiva.
+mac_vendedor_minimo_avaliacoes = 300
+mac_vendedor_minimo_positivo_porcentagem = 98
