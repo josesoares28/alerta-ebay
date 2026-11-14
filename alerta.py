@@ -86,7 +86,7 @@ MAC_SUSPEITO = 0.60  # abaixo de 60% do alvo ganha ⚠ (golpe ou defeito escondi
 # Título de Mac com defeito, bloqueio, muito desgaste, peça avulsa ou teclado japonês: ignora.
 MAC_EXCLUIR = re.compile(
     r"\b(parts?|repair|broken|crack\w*|damage\w*|defect\w*|issues?|problems?|bad|dead|faulty|"
-    r"not working|no power|won'?t|locked|icloud|mdm|activation|blacklist\w*|read desc\w*|as[- ]is|"
+    r"not working|no power|won'?t|locked|icloud|mdm|bypass\w*|activation|blacklist\w*|read desc\w*|as[- ]is|"
     r"lines?|spots?|dead pixels?|burn[- ]?in|logic ?board|motherboard|lcd|box only|empty box|"
     r"fair|grade [cd]|japanese|jis|intel|core m\d)\b",
     re.I,
