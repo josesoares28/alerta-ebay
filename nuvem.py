@@ -76,7 +76,7 @@ def ligar():
     if r.returncode:
         sys.exit("FALHOU ao ligar: " + (r.stderr or r.stdout).strip() + " Avise o Claude.")
     print("Ligado: a primeira rodada começa agora e as próximas vêm a cada ~10 min "
-          "(Macs em todas, tênis a cada ~30 min).")
+          "(Macs em todas, tênis a cada ~20 min).")
 
 
 def desligar():

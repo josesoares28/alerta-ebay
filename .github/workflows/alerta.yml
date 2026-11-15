@@ -1,5 +1,5 @@
 # Roda o alerta.py na nuvem do GitHub a cada ~10 minutos, de graça: Macs em toda
-# rodada, tênis a cada ~30 minutos (o alerta.py decide, para caber na cota do eBay).
+# rodada, tênis a cada ~20 minutos (o alerta.py decide, para caber na cota do eBay).
 #
 # Em 2026 o agendador do GitHub (cron) quase não dispara, então cada rodada agenda a
 # seguinte: a tarefa "esperar" usa o ambiente "intervalo", cuja regra segura a rodada

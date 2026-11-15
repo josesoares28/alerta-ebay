@@ -16,7 +16,7 @@ lista aparece até o preço-alvo, com a memória e o SSD mínimos, de vendedor b
 avaliado e sem defeito no título, e diz por quanto chega no Brasil.
 
 Na nuvem as rodadas vêm a cada ~10 minutos: os Macs são vistos em todas e os
-tênis só a cada ~30 minutos, para caber na cota diária do eBay.
+tênis só a cada ~20 minutos, para caber na cota diária do eBay.
 
 Uso:
     python alerta.py           verifica e avisa no celular (é o que a nuvem roda)
@@ -86,9 +86,9 @@ VERSAO_MAC = 1  # entra na chave dos Macs: subir manda um resumo novo deles
 MAC_PISO = 0.40  # a busca ignora abaixo de 40% do alvo: peça, caixa, acessório
 MAC_SUSPEITO = 0.60  # abaixo de 60% do alvo ganha ⚠ (golpe ou defeito escondido)
 # A corrente na nuvem roda a cada ~10 min. Os Macs entram em toda rodada (~10 consultas);
-# os tênis (~40 consultas) só quando a última olhada foi há 27 min ou mais, ou seja, a
-# cada ~30 min. O dia fica em ~3.400 das 5.000 consultas do eBay.
-TENIS_A_CADA = timedelta(minutes=27)
+# os tênis (~45 consultas) só quando a última olhada foi há 17 min ou mais, ou seja, a
+# cada ~20 min (uma rodada sim, outra não). O dia fica em ~4.000 das 5.000 consultas do eBay.
+TENIS_A_CADA = timedelta(minutes=17)
 
 # Título de Mac com defeito, bloqueio, muito desgaste, peça avulsa ou teclado japonês: ignora.
 MAC_EXCLUIR = re.compile(
@@ -1251,7 +1251,7 @@ def principal(so_listar=False, resumo=False):
         if any((s, "modelo", e) in vendas for s in prod["skus"] for e in giro):
             prod["giro_txt"] = (f"Droper vendeu {giro['novo']} novo(s) e {giro['usado']} usado(s) "
                                 "em 30 dias (tam 40-44)")
-    # Tênis só a cada ~30 min (TENIS_A_CADA); lista na tela e lista completa olham tudo.
+    # Tênis só a cada ~20 min (TENIS_A_CADA); lista na tela e lista completa olham tudo.
     ultima_tenis = estado.get("ultima_tenis")
     tenis = (so_listar or resumo or not ultima_tenis
              or agora - datetime.fromisoformat(ultima_tenis) >= TENIS_A_CADA)
