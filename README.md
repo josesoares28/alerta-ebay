@@ -4,7 +4,7 @@
 
 Avisa no celular quando aparece no eBay um tênis que dá lucro para revender no Brasil.
 
-A cada 30 minutos, de graça e com o PC desligado, o programa:
+A cada 30 minutos (os Macs a cada 10), de graça e com o PC desligado, o programa:
 1. procura no eBay os modelos da sua lista;
 2. calcula quanto custaria trazer cada par;
 3. compara com o que pares iguais venderam de verdade na Droper, no mesmo tamanho.
@@ -70,7 +70,7 @@ alerta-ebay/
 ├── *.bat                atalhos de dois cliques para o Windows
 ├── exemplos/            formato dos arquivos de dados, com números de exemplo
 ├── dados/               SEUS dados (só no PC, fora do GitHub)
-└── .github/workflows/   as rodadas na nuvem, a cada ~30 minutos
+└── .github/workflows/   as rodadas na nuvem, a cada ~10 minutos
 ```
 
 ## Como usar
@@ -209,7 +209,7 @@ Antes de pagar, peça a saúde da bateria e confirme que não tem iCloud nem MDM
   - Anúncio de vários tamanhos é aberto uma vez e guardado de 4 a 8 horas.
   - Se a cota acabar, o programa para sem erro e volta quando ela renova, às 4h (5h no horário de inverno dos EUA).
 - **Rodadas no GitHub:**
-  - O agendador do GitHub quase não dispara em 2026. Por isso cada rodada agenda a próxima: espera 28 minutos no ambiente `intervalo` (um temporizador do GitHub que não gasta minutos) e, no fim, dispara a seguinte.
-  - Na aba Actions deve aparecer uma "Rodada automática" a cada ~30 minutos. Se elas pararem, ou se chegar no celular o aviso "Alerta eBay parou", rode o `LIGAR.bat`. Um agendamento de reserva, a cada 2 horas, também religa as rodadas quando o GitHub dispara.
+  - O agendador do GitHub quase não dispara em 2026. Por isso cada rodada agenda a próxima: espera 8 minutos no ambiente `intervalo` (um temporizador do GitHub que não gasta minutos) e, no fim, dispara a seguinte. Os Macs são vistos em toda rodada; os tênis, que gastam mais consultas, só a cada ~30 minutos. Assim o dia fica em ~3.400 das 5.000 consultas que o eBay libera.
+  - Na aba Actions deve aparecer uma "Rodada automática" a cada ~10 minutos. Se elas pararem, ou se chegar no celular o aviso "Alerta eBay parou", rode o `LIGAR.bat`. Um agendamento de reserva, a cada 2 horas, também religa as rodadas quando o GitHub dispara.
   - O GitHub desliga workflow com agendamento em repositório público sem mudanças há 60 dias. Por isso, depois de 30 dias parado, a própria rodada grava a data em `ativo.txt`.
 - **O lucro é uma estimativa.** Antes de comprar, confira as fotos, o vendedor e o preço de hoje na Droper.

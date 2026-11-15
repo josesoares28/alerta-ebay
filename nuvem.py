@@ -67,7 +67,7 @@ def gh_api(*args):
 
 
 def ligar():
-    """Liga o workflow e começa a corrente: uma rodada agora e as próximas a cada ~30 min."""
+    """Liga o workflow e começa a corrente: uma rodada agora e as próximas a cada ~10 min."""
     caminho = f"repos/{REPOSITORIO}/actions/workflows/alerta.yml"
     r = gh_api("-X", "PUT", f"{caminho}/enable")
     if r.returncode == 0:
@@ -75,7 +75,8 @@ def ligar():
                    "-f", "inputs[continuar]=true")
     if r.returncode:
         sys.exit("FALHOU ao ligar: " + (r.stderr or r.stdout).strip() + " Avise o Claude.")
-    print("Ligado: a primeira rodada começa agora e as próximas vêm a cada ~30 min.")
+    print("Ligado: a primeira rodada começa agora e as próximas vêm a cada ~10 min "
+          "(Macs em todas, tênis a cada ~30 min).")
 
 
 def desligar():

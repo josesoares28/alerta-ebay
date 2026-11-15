@@ -1,8 +1,9 @@
-# Roda o alerta.py na nuvem do GitHub a cada ~30 minutos, de graça.
+# Roda o alerta.py na nuvem do GitHub a cada ~10 minutos, de graça: Macs em toda
+# rodada, tênis a cada ~30 minutos (o alerta.py decide, para caber na cota do eBay).
 #
 # Em 2026 o agendador do GitHub (cron) quase não dispara, então cada rodada agenda a
 # seguinte: a tarefa "esperar" usa o ambiente "intervalo", cuja regra segura a rodada
-# 28 minutos sem gastar nada, e a tarefa "proxima" dispara a rodada seguinte. O cron
+# 8 minutos sem gastar nada, e a tarefa "proxima" dispara a rodada seguinte. O cron
 # fica de reserva: se a corrente parar, a primeira rodada agendada que sair religa.
 #
 # O repositório é público: os minutos são ilimitados e, no plano grátis, o temporizador
@@ -42,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment:
-      name: intervalo  # a regra do ambiente segura esta tarefa 28 minutos, sem gastar minutos
+      name: intervalo  # a regra do ambiente segura esta tarefa 8 minutos, sem gastar minutos
       deployment: false
     steps:
       - name: Conferir o intervalo
@@ -54,9 +55,9 @@ jobs:
           criada=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -q .created_at || true)
           [ -n "$criada" ] || exit 0
           passou=$(( $(date +%s) - $(date -d "$criada" +%s) ))
-          if [ "$passou" -lt 1500 ]; then
+          if [ "$passou" -lt 420 ]; then
             echo "::warning::O ambiente intervalo não segurou a rodada; espero aqui."
-            sleep $(( 1680 - passou ))
+            sleep $(( 480 - passou ))
           fi
   verificar:
     needs: esperar

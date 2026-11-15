@@ -15,6 +15,9 @@ Também vigia MacBooks para comprar (dados/macs.csv): avisa quando um modelo da
 lista aparece até o preço-alvo, com a memória e o SSD mínimos, de vendedor bem
 avaliado e sem defeito no título, e diz por quanto chega no Brasil.
 
+Na nuvem as rodadas vêm a cada ~10 minutos: os Macs são vistos em todas e os
+tênis só a cada ~30 minutos, para caber na cota diária do eBay.
+
 Uso:
     python alerta.py           verifica e avisa no celular (é o que a nuvem roda)
     python alerta.py --lista   só mostra na tela o que está no alvo agora
@@ -82,6 +85,10 @@ CONDICOES_MAC = ("1000", "1500", "2000", "2010", "2020", "2030", "2500", "3000")
 VERSAO_MAC = 1  # entra na chave dos Macs: subir manda um resumo novo deles
 MAC_PISO = 0.40  # a busca ignora abaixo de 40% do alvo: peça, caixa, acessório
 MAC_SUSPEITO = 0.60  # abaixo de 60% do alvo ganha ⚠ (golpe ou defeito escondido)
+# A corrente na nuvem roda a cada ~10 min. Os Macs entram em toda rodada (~10 consultas);
+# os tênis (~40 consultas) só quando a última olhada foi há 27 min ou mais, ou seja, a
+# cada ~30 min. O dia fica em ~3.400 das 5.000 consultas do eBay.
+TENIS_A_CADA = timedelta(minutes=27)
 
 # Título de Mac com defeito, bloqueio, muito desgaste, peça avulsa ou teclado japonês: ignora.
 MAC_EXCLUIR = re.compile(
@@ -1225,7 +1232,13 @@ def principal(so_listar=False, resumo=False):
         if any((s, "modelo", e) in vendas for s in prod["skus"] for e in giro):
             prod["giro_txt"] = (f"Droper vendeu {giro['novo']} novo(s) e {giro['usado']} usado(s) "
                                 "em 30 dias (tam 40-44)")
-    for prod in produtos + ler_macs():
+    # Tênis só a cada ~30 min (TENIS_A_CADA); lista na tela e lista completa olham tudo.
+    ultima_tenis = estado.get("ultima_tenis")
+    tenis = (so_listar or resumo or not ultima_tenis
+             or agora - datetime.fromisoformat(ultima_tenis) >= TENIS_A_CADA)
+    if tenis:
+        estado["ultima_tenis"] = agora.isoformat()
+    for prod in (produtos if tenis else []) + ler_macs():
         if (prod["max"] is None) if prod.get("mac") else (prod["max_novo"] is None and prod["max_usado"] is None):
             log(f"linha {prod['linha']} ({prod['nome']}) sem preço máximo: pulei", detalhe=True)
             continue
@@ -1331,7 +1344,9 @@ def principal(so_listar=False, resumo=False):
     estado.pop("iniciado", None)  # formato antigo (antes de iniciar por produto)
     estado["ultima_rodada"] = agora.isoformat()
     n_macs = sum(1 for p in vigiados if p.get("mac"))
-    log(f"{len(vigiados) - n_macs} modelo(s){f' e {n_macs} Mac(s)' if n_macs else ''} verificado(s), "
+    vistos_txt = (f"{len(vigiados) - n_macs} modelo(s){f' e {n_macs} Mac(s)' if n_macs else ''}" if tenis
+                  else f"só Macs: {n_macs} Mac(s)")
+    log(f"{vistos_txt} verificado(s), "
         f"{len(encontrados)} anúncio(s) no alvo, "
         f"{avisados} aviso(s) novo(s){', resumo enviado' if mostrar else ''}; "
         f"consultas ao eBay hoje: {(estado.get('chamadas') or {}).get('n', 0)}")
