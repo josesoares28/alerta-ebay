@@ -438,6 +438,20 @@ def api_get(url, cfg, estado):
         raise
 
 
+def api_get_ou_sumiu(url, cfg, estado):
+    """Como api_get, mas anúncio ou grupo que já saiu do ar (404) volta None em vez de erro.
+
+    A busca do eBay às vezes mostra por dias um anúncio que já acabou; antes, o 404
+    dele derrubava o modelo inteiro em toda rodada (13/11: 4 de 15 tênis de fora).
+    """
+    try:
+        return api_get(url, cfg, estado)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
 def buscar(prod, cfg, estado):
     """Anúncios do eBay que podem servir para este produto (sem checar preço por condição).
 
@@ -508,7 +522,8 @@ def variacoes(item, cfg, estado):
     g = grupos.get(href)
     if g and g["preco"] == preco and datetime.fromisoformat(g["ate"]) > agora:
         return g["itens"]
-    itens = [enxuto(v) for v in api_get(href, cfg, estado).get("items") or []
+    resposta = api_get_ou_sumiu(href, cfg, estado) or {}  # grupo que saiu do ar: nenhum tamanho, guardado
+    itens = [enxuto(v) for v in resposta.get("items") or []
              if (v.get("estimatedAvailabilities") or [{}])[0].get("estimatedAvailabilityStatus") != "OUT_OF_STOCK"]
     grupos[href] = {"preco": preco, "itens": itens,
                     "ate": (agora + timedelta(hours=random.uniform(*HORAS_GRUPO))).isoformat()}
@@ -529,7 +544,11 @@ def ficha(item, cfg, estado):
             return guardada
         if not item.get("itemHref"):
             return {"codigo": "", "tamanho": "", "infantil": False}
-        completo = api_get(item["itemHref"], cfg, estado)
+        completo = api_get_ou_sumiu(item["itemHref"], cfg, estado)
+        if completo is None:  # o anúncio já saiu do ar: guarda, para não perguntar de novo
+            dados = {"codigo": "", "tamanho": "", "infantil": False, "sumiu": True}
+            fichas[item["itemId"]] = dict(dados, quando=datetime.now(timezone.utc).isoformat())
+            return dados
     aspectos = completo.get("localizedAspects") or []
     codigo = " ".join(a.get("value") or "" for a in aspectos
                       if (a.get("name") or "").lower() in ("style code", "style number", "mpn"))
@@ -869,7 +888,7 @@ def specs_mac(item, cfg, estado):
         if not (guardada and "memorias" in guardada):
             if not item.get("itemHref"):
                 return ram, ssd
-            aspectos = api_get(item["itemHref"], cfg, estado).get("localizedAspects") or []
+            aspectos = (api_get_ou_sumiu(item["itemHref"], cfg, estado) or {}).get("localizedAspects") or []
             guardada = {"memorias": " ".join(
                 a.get("value") or "" for a in aspectos
                 if re.search(r"ram|ssd|capacity|storage|memory", a.get("name") or "", re.I)),
@@ -1252,7 +1271,9 @@ def principal(so_listar=False, resumo=False):
                 for a in achou:
                     estimar_lucro(a, prod, droper, vendas, aj, cotacao)
                 # par infantil que só a descrição entrega: uma consulta por anúncio, guardada
-                achou = [a for a in achou if no_alvo(a, prod) and not ficha(a["_bruto"], cfg, estado)["infantil"]]
+                # (e anúncio que já saiu do ar, mas a busca ainda mostra)
+                achou = [a for a in achou if no_alvo(a, prod)
+                         and not any(ficha(a["_bruto"], cfg, estado).get(k) for k in ("infantil", "sumiu"))]
                 for a in achou:
                     ressalvas(a, prod, cfg, estado)
             encontrados += achou
