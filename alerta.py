@@ -116,6 +116,7 @@ def tam_br(tamanho, feminino=False):
 AJUSTES_PADRAO = {
     "custo_personal_shopper_reais": 400,
     "droper_voce_recebe_porcentagem": 87,
+    "imposto_simples_porcentagem": 4,
     "cartao_acima_do_dolar_oficial_porcentagem": 3.7,
     "iof_porcentagem": 3.5,
     "sales_tax_eua_porcentagem": 0,
@@ -790,8 +791,12 @@ def estimar_lucro(a, prod, droper, vendas, aj, cotacao):
     modelo = vendas.get((sku, "modelo", estado_par)) or {}
     a["vendas_30d_modelo"] = modelo.get("n30", 0)
     a["desconto_giro"] = next(d for minimo, d in DESCONTO_GIRO if a["vendas_30d_modelo"] >= minimo)
-    recebe = ref * (1 - a["desconto_giro"]) * aj["droper_voce_recebe_porcentagem"] / 100
-    a["recebe"], a["lucro"] = recebe, recebe - a["custo"]
+    venda = ref * (1 - a["desconto_giro"])
+    # Simples Nacional: % sobre o preço de venda (não sobre o que a Droper repassa).
+    a["imposto"] = venda * aj["imposto_simples_porcentagem"] / 100
+    a["recebe"] = venda * aj["droper_voce_recebe_porcentagem"] / 100
+    recebe = a["recebe"] - a["imposto"]  # o que sobra depois da comissão e do imposto
+    a["lucro"] = recebe - a["custo"]
     # Até quanto pagar: sobra o lucro mínimo em reais e, em par caro, a % mínima do custo.
     custo_max = min(recebe - aj["lucro_minimo_reais"],
                     recebe / (1 + aj["lucro_minimo_porcentagem_do_custo"] / 100))
@@ -1088,9 +1093,11 @@ def linha_lucro(a):
         if a.get("desconto_giro"):
             giro += (f"; -{a['desconto_giro']:.0%} porque o modelo vendeu "
                      f"{a.get('vendas_30d_modelo', 0)} {estado_pt}(s) em 30 dias")
-        texto = (f"{txt_lucro(a['lucro']).capitalize()}: Droper {a['tam_br']} {estado_pt} "
-                 f"{brl(a['droper'])} ({a['droper_fonte']}{giro}) → você recebe {brl(a['recebe'])}; "
-                 f"custo {brl(a['custo'])}")
+        lucro_txt = txt_lucro(a["lucro"])
+        texto = (f"{lucro_txt[:1].upper() + lucro_txt[1:]}: Droper {a['tam_br']} {estado_pt} "
+                 f"{brl(a['droper'])} ({a['droper_fonte']}{giro}) → você recebe {brl(a['recebe'])}"
+                 + (f", menos {brl(a['imposto'])} de imposto" if a.get("imposto") else "")
+                 + f"; custo {brl(a['custo'])}")
         if a.get("droper_fora"):
             texto += f". No {a['tam_br']} só há anúncio a {brl(a['droper_fora'])}"
         if a.get("preco_max") and a["preco_max"] > 0:

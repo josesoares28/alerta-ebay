@@ -159,7 +159,8 @@ custo     = (preço + frete) × dólar do dia × (1 + cartão) × (1 + IOF) × (
             + custo fixo por par
 vende por = mediana das 5 últimas vendas na Droper no tamanho e estado
 recebe    = vende por × (1 − desconto por giro) × parte que fica com você
-lucro     = recebe − custo
+imposto   = vende por × (1 − desconto por giro) × imposto do Simples (4%)
+lucro     = recebe − imposto − custo
 ```
 
 - **Tamanho com menos de 2 vendas em 6 meses:** vale a mediana do modelo.

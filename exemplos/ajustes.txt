@@ -8,6 +8,10 @@ custo_personal_shopper_reais = 400
 # Quanto da venda na Droper fica com você, em % (o resto é a comissão).
 droper_voce_recebe_porcentagem = 87
 
+# Imposto da empresa sobre a venda (Simples Nacional, comércio), em % do preço
+# de venda. Sai no DAS do mês seguinte. 0 se não houver.
+imposto_simples_porcentagem = 4
+
 # Quanto o cartão cobra acima do dólar oficial (veja nas suas faturas).
 cartao_acima_do_dolar_oficial_porcentagem = 4
 
